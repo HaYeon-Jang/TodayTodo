@@ -1,5 +1,7 @@
 # Gradle files
 .gradle/
+.gradle-user-home/
+.android-user-home/
 build/
 
 # Local configuration file (sdk path, etc)
@@ -14,6 +16,9 @@ captures/
 .cxx/
 *.apk
 output.json
+
+# Local app data backups
+backup/
 
 # IntelliJ
 *.iml

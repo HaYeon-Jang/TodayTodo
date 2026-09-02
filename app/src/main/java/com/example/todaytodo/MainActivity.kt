@@ -4,7 +4,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -30,10 +33,13 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -113,6 +119,7 @@ private fun TodayTodoApp() {
     var input by remember { mutableStateOf("") }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showAppMenu by remember { mutableStateOf(false) }
 
     fun persist() = store.save(todos)
     fun addTodo() {
@@ -121,6 +128,46 @@ private fun TodayTodoApp() {
         todos.add(0, TodoItem(UUID.randomUUID().toString(), title, selectedDate))
         input = ""
         persist()
+    }
+
+    val backupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(store.createBackup(todos))
+                } ?: error("백업 파일을 열 수 없습니다.")
+            }.onSuccess {
+                Toast.makeText(context, "백업이 저장됐어요", Toast.LENGTH_SHORT).show()
+            }.onFailure {
+                Toast.makeText(context, "백업 저장에 실패했어요", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val backupText = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use {
+                    it.readText()
+                } ?: error("백업 파일을 열 수 없습니다.")
+                store.readBackup(backupText)
+            }.onSuccess { restoredTodos ->
+                val merged = (todos + restoredTodos).distinctBy { it.id }
+                todos.clear()
+                todos.addAll(merged)
+                persist()
+                Toast.makeText(
+                    context,
+                    "${restoredTodos.size}개 항목을 복원했어요",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }.onFailure {
+                Toast.makeText(context, "올바른 TodayTodo 백업 파일이 아니에요", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     val selectedTodos = todos.filter { it.date == selectedDate }
@@ -178,12 +225,47 @@ private fun TodayTodoApp() {
                     .padding(horizontal = 20.dp)
             ) {
                 Spacer(Modifier.height(24.dp))
-                Text(
-                    text = "날짜별 할 일",
-                    color = Ink,
-                    fontSize = 30.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "TODO",
+                        color = Ink,
+                        fontSize = 30.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box {
+                        IconButton(onClick = { showAppMenu = true }) {
+                            Text(
+                                text = "⋮",
+                                color = Grey,
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showAppMenu,
+                            onDismissRequest = { showAppMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("백업 파일 저장") },
+                                onClick = {
+                                    showAppMenu = false
+                                    backupLauncher.launch("TodayTodo-backup-${LocalDate.now()}.json")
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("백업 파일 복원") },
+                                onClick = {
+                                    showAppMenu = false
+                                    restoreLauncher.launch(arrayOf("application/json", "text/plain"))
+                                },
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = when {
                         remaining > 0 -> "남은 할 일 ${remaining}개"
@@ -380,7 +462,23 @@ internal class TodoStore(private val context: Context) {
     private val preferences = context.getSharedPreferences("today_todo", Context.MODE_PRIVATE)
 
     fun load(): List<TodoItem> = runCatching {
-        val array = JSONArray(preferences.getString("todos", "[]"))
+        decodeTodos(JSONArray(preferences.getString("todos", "[]")))
+    }.getOrDefault(emptyList())
+
+    fun createBackup(todos: List<TodoItem>): String = JSONObject()
+        .put("app", "TodayTodo")
+        .put("version", 1)
+        .put("createdAt", java.time.ZonedDateTime.now().toString())
+        .put("todos", encodeTodos(todos))
+        .toString(2)
+
+    fun readBackup(text: String): List<TodoItem> {
+        val backup = JSONObject(text)
+        require(backup.optString("app") == "TodayTodo")
+        return decodeTodos(backup.getJSONArray("todos"))
+    }
+
+    private fun decodeTodos(array: JSONArray): List<TodoItem> =
         buildList {
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
@@ -397,9 +495,13 @@ internal class TodoStore(private val context: Context) {
                 )
             }
         }
-    }.getOrDefault(emptyList())
 
     fun save(todos: List<TodoItem>) {
+        preferences.edit().putString("todos", encodeTodos(todos).toString()).apply()
+        TodoReminder.scheduleNext(context)
+    }
+
+    private fun encodeTodos(todos: List<TodoItem>): JSONArray {
         val array = JSONArray()
         todos.forEach { todo ->
             array.put(
@@ -410,8 +512,7 @@ internal class TodoStore(private val context: Context) {
                     .put("completed", todo.completed)
             )
         }
-        preferences.edit().putString("todos", array.toString()).apply()
-        TodoReminder.scheduleNext(context)
+        return array
     }
 }
 

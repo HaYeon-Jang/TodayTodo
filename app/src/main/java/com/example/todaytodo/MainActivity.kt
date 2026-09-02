@@ -1,6 +1,8 @@
 package com.example.todaytodo
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -85,7 +87,19 @@ private enum class TodoFilter(val label: String) {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TodoReminder.createNotificationChannel(this)
+        TodoReminder.scheduleNext(this)
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_PERMISSION_REQUEST)
+        }
         setContent { TodayTodoApp() }
+    }
+
+    private companion object {
+        const val NOTIFICATION_PERMISSION_REQUEST = 1001
     }
 }
 
@@ -362,7 +376,7 @@ private fun EmptyState(filter: TodoFilter) {
     }
 }
 
-private class TodoStore(context: Context) {
+internal class TodoStore(private val context: Context) {
     private val preferences = context.getSharedPreferences("today_todo", Context.MODE_PRIVATE)
 
     fun load(): List<TodoItem> = runCatching {
@@ -397,6 +411,7 @@ private class TodoStore(context: Context) {
             )
         }
         preferences.edit().putString("todos", array.toString()).apply()
+        TodoReminder.scheduleNext(context)
     }
 }
 

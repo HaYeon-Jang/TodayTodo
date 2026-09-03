@@ -25,14 +25,14 @@ internal object TodoReminder {
             "미완료 할 일 알림",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "매일 오후 11시에 완료하지 않은 할 일을 알려줍니다."
+            description = "매일 오후 10시에 완료하지 않은 할 일을 알려줍니다."
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     fun scheduleNext(context: Context) {
         val now = ZonedDateTime.now()
-        var target = now.withHour(23).withMinute(0).withSecond(0).withNano(0)
+        var target = now.withHour(22).withMinute(0).withSecond(0).withNano(0)
         if (!target.isAfter(now)) target = target.plusDays(1)
 
         val intent = Intent(context, TodoReminderReceiver::class.java).apply {

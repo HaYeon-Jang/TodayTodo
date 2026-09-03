@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">오늘할일</string>
+    <string name="widget_description">오늘의 미완료 할 일을 보여주는 위젯</string>
 </resources>

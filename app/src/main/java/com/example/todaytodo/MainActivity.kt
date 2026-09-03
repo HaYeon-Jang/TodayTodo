@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,7 +60,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,8 +80,9 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 
-private val AppBackground = Color(0xFFF4FBFB)
-private val Aqua = Color(0xFF6DD6DA)
+private val AppBackground = Color(0xFFF8F9FB)
+private val HeaderBackground = Color(0xFFAE8CA3)
+private val Aqua = Color(0xFF63C8CC)
 private val AquaSoft = Color(0xFF95D9DA)
 private val Lilac = Color(0xFFAE8CA3)
 private val Steel = Color(0xFFA2ABB5)
@@ -83,6 +90,12 @@ private val Grey = Color(0xFF817F82)
 private val Ink = Color(0xFF343336)
 private val Line = Color(0xFFD8E0E4)
 private val Card = Color(0xFFFFFFFF)
+
+private val TitleFontFamily = FontFamily(Font(R.font.cafe24_ssurround))
+private val BodyFontFamily = FontFamily(
+    Font(R.font.nanum_square_round_regular, FontWeight.Normal),
+    Font(R.font.nanum_square_round_bold, FontWeight.Bold),
+)
 
 data class TodoItem(
     val id: String,
@@ -111,6 +124,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         TodoReminder.createNotificationChannel(this)
         TodoReminder.scheduleNext(this)
+        TodoWidgetProvider.updateAll(this)
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -548,7 +562,27 @@ private fun TodayTodoApp() {
         )
     }
 
+    val defaultTypography = MaterialTheme.typography
+    val appTypography = defaultTypography.copy(
+        displayLarge = defaultTypography.displayLarge.copy(fontFamily = BodyFontFamily),
+        displayMedium = defaultTypography.displayMedium.copy(fontFamily = BodyFontFamily),
+        displaySmall = defaultTypography.displaySmall.copy(fontFamily = BodyFontFamily),
+        headlineLarge = defaultTypography.headlineLarge.copy(fontFamily = BodyFontFamily),
+        headlineMedium = defaultTypography.headlineMedium.copy(fontFamily = BodyFontFamily),
+        headlineSmall = defaultTypography.headlineSmall.copy(fontFamily = BodyFontFamily),
+        titleLarge = defaultTypography.titleLarge.copy(fontFamily = BodyFontFamily),
+        titleMedium = defaultTypography.titleMedium.copy(fontFamily = BodyFontFamily),
+        titleSmall = defaultTypography.titleSmall.copy(fontFamily = BodyFontFamily),
+        bodyLarge = defaultTypography.bodyLarge.copy(fontFamily = BodyFontFamily),
+        bodyMedium = defaultTypography.bodyMedium.copy(fontFamily = BodyFontFamily),
+        bodySmall = defaultTypography.bodySmall.copy(fontFamily = BodyFontFamily),
+        labelLarge = defaultTypography.labelLarge.copy(fontFamily = BodyFontFamily),
+        labelMedium = defaultTypography.labelMedium.copy(fontFamily = BodyFontFamily),
+        labelSmall = defaultTypography.labelSmall.copy(fontFamily = BodyFontFamily),
+    )
+
     MaterialTheme(
+        typography = appTypography,
         colorScheme = MaterialTheme.colorScheme.copy(
             primary = Aqua,
             secondary = Lilac,
@@ -559,30 +593,38 @@ private fun TodayTodoApp() {
             outline = Steel,
         )
     ) {
-        Scaffold(containerColor = AppBackground) { contentPadding ->
+        ProvideTextStyle(ComposeTextStyle(fontFamily = BodyFontFamily)) {
+        Scaffold(containerColor = Color.Transparent) { contentPadding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .padding(horizontal = 20.dp)
+                    .background(HeaderBackground)
             ) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(18.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Image(
+                        painter = painterResource(R.drawable.todaytodo_mascot),
+                        contentDescription = "TodayTodo 캐릭터",
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     Text(
                         text = "TODO",
-                        color = Ink,
-                        fontSize = 30.sp,
+                        color = Color.White,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        fontFamily = TitleFontFamily,
                         modifier = Modifier.weight(1f),
                     )
                     Box {
                         IconButton(onClick = { showAppMenu = true }) {
                             Text(
                                 text = "⋮",
-                                color = Grey,
+                                color = Color.White,
                                 fontSize = 28.sp,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -634,14 +676,14 @@ private fun TodayTodoApp() {
                         selectedTodos.isEmpty() -> "등록된 할 일이 없어요"
                         else -> "이날의 할 일을 모두 마쳤어요"
                     },
-                    color = Grey,
+                    color = Color.White.copy(alpha = 0.88f),
                     fontSize = 15.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+                    modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 14.dp),
                 )
 
                 if (ddays.isNotEmpty()) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         ddays.forEach { item ->
@@ -651,8 +693,16 @@ private fun TodayTodoApp() {
                     Spacer(Modifier.height(10.dp))
                 }
 
+                Surface(
+                    color = AppBackground,
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                ) {
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+                Spacer(Modifier.height(18.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -662,7 +712,7 @@ private fun TodayTodoApp() {
                     OutlinedButton(
                         onClick = { showDatePicker = true },
                         shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f).height(50.dp),
+                        modifier = Modifier.weight(1f).height(44.dp),
                     ) {
                         Text(
                             text = formatDate(selectedDate),
@@ -701,7 +751,7 @@ private fun TodayTodoApp() {
                             focusedIndicatorColor = Aqua,
                             unfocusedIndicatorColor = Line,
                         ),
-                        modifier = Modifier.weight(1f).height(50.dp),
+                        modifier = Modifier.weight(1f).height(52.dp),
                     )
                     Spacer(Modifier.width(10.dp))
                     Button(
@@ -712,7 +762,7 @@ private fun TodayTodoApp() {
                             containerColor = Aqua,
                             contentColor = Ink,
                         ),
-                        modifier = Modifier.height(50.dp),
+                        modifier = Modifier.height(52.dp),
                     ) {
                         Text("추가", fontWeight = FontWeight.Bold)
                     }
@@ -766,7 +816,10 @@ private fun TodayTodoApp() {
                     }
                     item { Spacer(Modifier.height(24.dp)) }
                 }
+                }
+                }
             }
+        }
         }
     }
 }
@@ -786,40 +839,38 @@ private fun DdayCard(item: DdayItem, modifier: Modifier = Modifier) {
     }
 
     Surface(
-        color = Lilac.copy(alpha = 0.18f),
-        shape = RoundedCornerShape(16.dp),
-        modifier = modifier,
+        color = Card,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 6.dp,
+        modifier = modifier.height(116.dp),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
                 text = item.title,
-                color = Ink,
-                fontSize = 14.sp,
+                color = Lilac,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 3.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                Text(
-                    text = ddayText,
-                    color = Grey,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "${item.date.monthValue}.${item.date.dayOfMonth} · $description",
-                    color = Grey,
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = ddayText,
+                color = if (days < 0) Aqua else Lilac,
+                fontSize = 21.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                softWrap = false,
+            )
+            Text(
+                text = "${item.date.monthValue}.${item.date.dayOfMonth} · $description",
+                color = Grey,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -963,6 +1014,7 @@ internal class TodoStore(private val context: Context) {
     fun save(todos: List<TodoItem>) {
         preferences.edit().putString("todos", encodeTodos(todos).toString()).apply()
         TodoReminder.scheduleNext(context)
+        TodoWidgetProvider.updateAll(context)
     }
 
     private fun encodeTodos(todos: List<TodoItem>): JSONArray {

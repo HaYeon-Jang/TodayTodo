@@ -80,15 +80,15 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 
-private val AppBackground = Color(0xFFF8F9FB)
-private val HeaderBackground = Color(0xFFAE8CA3)
-private val Aqua = Color(0xFF63C8CC)
-private val AquaSoft = Color(0xFF95D9DA)
-private val Lilac = Color(0xFFAE8CA3)
-private val Steel = Color(0xFFA2ABB5)
-private val Grey = Color(0xFF817F82)
-private val Ink = Color(0xFF343336)
-private val Line = Color(0xFFD8E0E4)
+private val AppBackground = Color(0xFFF7F6F2)
+private val HeaderBackground = Color(0xFF657681)
+private val Aqua = Color(0xFF9CB9B3)
+private val AquaSoft = Color(0xFFCFE0DC)
+private val Lilac = Color(0xFFC9969D)
+private val Steel = Color(0xFF858C91)
+private val Grey = Color(0xFF858C91)
+private val Ink = Color(0xFF303538)
+private val Line = Color(0xFFE3E6E5)
 private val Card = Color(0xFFFFFFFF)
 
 private val TitleFontFamily = FontFamily(Font(R.font.cafe24_ssurround))
@@ -618,6 +618,18 @@ private fun TodayTodoApp() {
                         fontSize = 34.sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = TitleFontFamily,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = when {
+                            remaining > 0 -> "남은 할 일 ${remaining}개"
+                            selectedTodos.isEmpty() -> "등록된 할 일이 없어요"
+                            else -> "모두 완료했어요"
+                        },
+                        color = Color.White.copy(alpha = 0.88f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     Box {
@@ -670,16 +682,7 @@ private fun TodayTodoApp() {
                         }
                     }
                 }
-                Text(
-                    text = when {
-                        remaining > 0 -> "남은 할 일 ${remaining}개"
-                        selectedTodos.isEmpty() -> "등록된 할 일이 없어요"
-                        else -> "이날의 할 일을 모두 마쳤어요"
-                    },
-                    color = Color.White.copy(alpha = 0.88f),
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 14.dp),
-                )
+                Spacer(Modifier.height(14.dp))
 
                 if (ddays.isNotEmpty()) {
                     Row(
@@ -778,14 +781,14 @@ private fun TodayTodoApp() {
                             onClick = { filter = option },
                             label = { Text(option.label) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Lilac.copy(alpha = 0.22f),
+                                selectedContainerColor = Aqua.copy(alpha = 0.24f),
                                 selectedLabelColor = Grey,
                             ),
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
                                 selected = filter == option,
                                 borderColor = Line,
-                                selectedBorderColor = Lilac,
+                                selectedBorderColor = Aqua,
                             ),
                         )
                     }
@@ -858,7 +861,7 @@ private fun DdayCard(item: DdayItem, modifier: Modifier = Modifier) {
             )
             Text(
                 text = ddayText,
-                color = if (days < 0) Aqua else Lilac,
+                color = Lilac,
                 fontSize = 21.sp,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,

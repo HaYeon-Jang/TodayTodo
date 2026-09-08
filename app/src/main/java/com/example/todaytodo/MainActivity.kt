@@ -10,8 +10,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +36,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -60,7 +59,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -80,15 +78,15 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.UUID
 
-private val AppBackground = Color(0xFFF7F6F2)
-private val HeaderBackground = Color(0xFF657681)
-private val Aqua = Color(0xFF9CB9B3)
-private val AquaSoft = Color(0xFFCFE0DC)
-private val Lilac = Color(0xFFC9969D)
-private val Steel = Color(0xFF858C91)
-private val Grey = Color(0xFF858C91)
-private val Ink = Color(0xFF303538)
-private val Line = Color(0xFFE3E6E5)
+private val AppBackground = Color(0xFFF3F7FD)
+private val HeaderBackground = Color(0xFFF3F7FD)
+private val Aqua = Color(0xFF2F8FEF)
+private val AquaSoft = Color(0xFFDCEEFF)
+private val Lilac = Color(0xFF2F8FEF)
+private val Steel = Color(0xFF7D91A6)
+private val Grey = Color(0xFF7D91A6)
+private val Ink = Color(0xFF17263A)
+private val Line = Color(0xFFDFEAF5)
 private val Card = Color(0xFFFFFFFF)
 
 private val TitleFontFamily = FontFamily(Font(R.font.cafe24_ssurround))
@@ -149,7 +147,7 @@ private fun TodayTodoApp() {
     var input by remember { mutableStateOf("") }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var showAppMenu by remember { mutableStateOf(false) }
+    var showSettingsScreen by remember { mutableStateOf(false) }
     val ddays = remember { mutableStateListOf<DdayItem>().apply { addAll(store.loadDdays()) } }
     var showDdayManager by remember { mutableStateOf(false) }
     var showDdayDialog by remember { mutableStateOf(false) }
@@ -231,6 +229,8 @@ private fun TodayTodoApp() {
     }
     val remaining = selectedTodos.count { !it.completed }
     val today = LocalDate.now()
+    val weekStart = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
+    val weekDates = (0L..6L).map { weekStart.plusDays(it) }
 
     if (showDatePicker) {
         val datePickerState = androidx.compose.material3.rememberDatePickerState(
@@ -594,185 +594,181 @@ private fun TodayTodoApp() {
         )
     ) {
         ProvideTextStyle(ComposeTextStyle(fontFamily = BodyFontFamily)) {
-        Scaffold(containerColor = Color.Transparent) { contentPadding ->
+        Scaffold(containerColor = AppBackground) { contentPadding ->
+            if (showSettingsScreen) {
+                SettingsScreen(
+                    modifier = Modifier.padding(contentPadding),
+                    onBack = { showSettingsScreen = false },
+                    onRepeat = {
+                        repeatTitle = ""
+                        repeatType = RepeatType.DAILY
+                        repeatStartDate = selectedDate
+                        repeatEndDate = selectedDate.plusMonths(1)
+                        repeatWeekdays.clear()
+                        repeatWeekdays.add(selectedDate.dayOfWeek)
+                        showRepeatDialog = true
+                    },
+                    onDday = { showDdayManager = true },
+                    onBackup = { backupLauncher.launch("TodayTodo-backup-${LocalDate.now()}.json") },
+                    onRestore = { restoreLauncher.launch(arrayOf("application/json", "text/plain")) },
+                )
+            } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .background(HeaderBackground)
+                    .background(AppBackground)
+                    .padding(horizontal = 18.dp),
             ) {
-                Spacer(Modifier.height(18.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.todaytodo_mascot),
-                        contentDescription = "TodayTodo 캐릭터",
-                        modifier = Modifier.size(48.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "TODO",
-                        color = Color.White,
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = TitleFontFamily,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = when {
-                            remaining > 0 -> "남은 할 일 ${remaining}개"
-                            selectedTodos.isEmpty() -> "등록된 할 일이 없어요"
-                            else -> "모두 완료했어요"
-                        },
-                        color = Color.White.copy(alpha = 0.88f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Box {
-                        IconButton(onClick = { showAppMenu = true }) {
-                            Text(
-                                text = "⋮",
-                                color = Color.White,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showAppMenu,
-                            onDismissRequest = { showAppMenu = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("반복 일정 등록") },
-                                onClick = {
-                                    showAppMenu = false
-                                    repeatTitle = ""
-                                    repeatType = RepeatType.DAILY
-                                    repeatStartDate = selectedDate
-                                    repeatEndDate = selectedDate.plusMonths(1)
-                                    repeatWeekdays.clear()
-                                    repeatWeekdays.add(selectedDate.dayOfWeek)
-                                    showRepeatDialog = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("디데이 설정") },
-                                onClick = {
-                                    showAppMenu = false
-                                    showDdayManager = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("백업 파일 저장") },
-                                onClick = {
-                                    showAppMenu = false
-                                    backupLauncher.launch("TodayTodo-backup-${LocalDate.now()}.json")
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("백업 파일 복원") },
-                                onClick = {
-                                    showAppMenu = false
-                                    restoreLauncher.launch(arrayOf("application/json", "text/plain"))
-                                },
-                            )
-                        }
-                    }
-                }
                 Spacer(Modifier.height(14.dp))
-
-                if (ddays.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ddays.forEach { item ->
-                            DdayCard(item, Modifier.weight(1f))
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                }
-
-                Surface(
-                    color = AppBackground,
-                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                ) {
-                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-                Spacer(Modifier.height(18.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    TextButton(onClick = { selectedDate = selectedDate.minusDays(1) }) {
-                        Text("‹ 이전", color = Grey)
-                    }
-                    OutlinedButton(
-                        onClick = { showDatePicker = true },
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f).height(44.dp),
-                    ) {
-                        Text(
-                            text = formatDate(selectedDate),
-                            color = if (selectedDate == today) Lilac else Ink,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    TextButton(onClick = { selectedDate = selectedDate.plusDays(1) }) {
-                        Text("다음 ›", color = Grey)
-                    }
-                }
-
-                AnimatedVisibility(visible = selectedDate != today) {
-                    TextButton(
-                        onClick = { selectedDate = today },
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                    ) {
-                        Text("오늘로 돌아가기", color = Lilac)
-                    }
-                }
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "TODO",
+                            color = Ink,
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = TitleFontFamily,
+                        )
+                        Text(
+                            text = when {
+                                remaining > 0 -> "오늘 남은 할 일 ${remaining}개"
+                                selectedTodos.isEmpty() -> "등록된 할 일이 없어요"
+                                else -> "오늘 할 일을 모두 마쳤어요"
+                            },
+                            color = Grey,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    Surface(
+                        color = Card,
+                        shape = CircleShape,
+                        shadowElevation = 3.dp,
+                    ) {
+                        IconButton(onClick = { showSettingsScreen = true }) {
+                            Text("⚙", color = Ink, fontSize = 22.sp)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Surface(
+                    color = Card,
+                    shape = RoundedCornerShape(22.dp),
+                    shadowElevation = 3.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "${selectedDate.monthValue}월",
+                                color = Ink,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                formatDate(selectedDate),
+                                color = Grey,
+                                fontSize = 11.sp,
+                                modifier = Modifier.clickable { showDatePicker = true },
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            weekDates.forEach { date ->
+                                val selected = date == selectedDate
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(58.dp)
+                                        .background(
+                                            if (selected) Aqua else Color.Transparent,
+                                            RoundedCornerShape(16.dp),
+                                        )
+                                        .clickable { selectedDate = date },
+                                ) {
+                                    Text(
+                                        text = date.dayOfMonth.toString(),
+                                        color = if (selected) Color.White else Ink,
+                                        fontSize = 18.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                    Text(
+                                        text = date.dayOfWeek.koreanShortName(),
+                                        color = when {
+                                            selected -> Color.White.copy(alpha = 0.9f)
+                                            date.dayOfWeek == DayOfWeek.SUNDAY -> Color(0xFFFF6B6B)
+                                            else -> Grey
+                                        },
+                                        fontSize = 11.sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(visible = selectedDate != today) {
+                    TextButton(onClick = { selectedDate = today }, modifier = Modifier.fillMaxWidth()) {
+                        Text("오늘로 돌아가기", color = Aqua, fontSize = 12.sp)
+                    }
+                }
+
+                if (ddays.isNotEmpty()) {
+                    Spacer(Modifier.height(if (selectedDate == today) 10.dp else 0.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        ddays.forEach { item -> DdayCard(item, Modifier.weight(1f)) }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = input,
                         onValueChange = { input = it },
-                        placeholder = { Text("${selectedDate.monthValue}/${selectedDate.dayOfMonth} 할 일") },
+                        placeholder = { Text("할 일을 입력하세요") },
                         singleLine = true,
                         keyboardActions = KeyboardActions(onDone = { addTodo() }),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(20.dp),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = Card,
                             unfocusedContainerColor = Card,
                             focusedIndicatorColor = Aqua,
                             unfocusedIndicatorColor = Line,
                         ),
-                        modifier = Modifier.weight(1f).height(52.dp),
+                        modifier = Modifier.weight(1f).height(54.dp),
                     )
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { addTodo() },
                         enabled = input.isNotBlank(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Aqua,
-                            contentColor = Ink,
+                            contentColor = Color.White,
+                            disabledContainerColor = Line,
                         ),
-                        modifier = Modifier.height(52.dp),
+                        modifier = Modifier.size(54.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                     ) {
-                        Text("추가", fontWeight = FontWeight.Bold)
+                        Text("+", fontSize = 30.sp, fontWeight = FontWeight.Light)
                     }
                 }
 
                 Row(
-                    modifier = Modifier.padding(vertical = 18.dp),
+                    modifier = Modifier.padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     TodoFilter.entries.forEach { option ->
@@ -780,9 +776,12 @@ private fun TodayTodoApp() {
                             selected = filter == option,
                             onClick = { filter = option },
                             label = { Text(option.label) },
+                            shape = RoundedCornerShape(18.dp),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Aqua.copy(alpha = 0.24f),
-                                selectedLabelColor = Grey,
+                                containerColor = Card,
+                                labelColor = Grey,
+                                selectedContainerColor = Aqua,
+                                selectedLabelColor = Color.White,
                             ),
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
@@ -794,13 +793,10 @@ private fun TodayTodoApp() {
                     }
                 }
 
-                AnimatedVisibility(visible = visibleTodos.isEmpty()) {
-                    EmptyState(filter)
-                }
-
+                AnimatedVisibility(visible = visibleTodos.isEmpty()) { EmptyState(filter) }
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(7.dp),
-                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                 ) {
                     items(visibleTodos, key = { it.id }) { todo ->
                         TodoRow(
@@ -812,17 +808,132 @@ private fun TodayTodoApp() {
                                     persist()
                                 }
                             },
-                            onDelete = {
-                                todoToDelete = todo
-                            },
+                            onDelete = { todoToDelete = todo },
                         )
                     }
-                    item { Spacer(Modifier.height(24.dp)) }
+                    item { Spacer(Modifier.height(10.dp)) }
                 }
-                }
+
+                Surface(
+                    color = Card,
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                    shadowElevation = 5.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        BottomNavItem("✓", "할 일", true) { }
+                        BottomNavItem("▦", "달력", false) { showDatePicker = true }
+                        BottomNavItem("⚙", "설정", false) { showSettingsScreen = true }
+                    }
                 }
             }
+            }
         }
+        }
+    }
+}
+
+@Composable
+private fun SettingsScreen(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit,
+    onRepeat: () -> Unit,
+    onDday: () -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AppBackground)
+            .padding(horizontal = 18.dp),
+    ) {
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = Card, shape = CircleShape, shadowElevation = 3.dp) {
+                IconButton(onClick = onBack) {
+                    Text("‹", color = Ink, fontSize = 32.sp)
+                }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(
+                    text = "설정",
+                    color = Ink,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = TitleFontFamily,
+                )
+                Text("TodayTodo를 내 방식대로 관리하세요", color = Grey, fontSize = 12.sp)
+            }
+        }
+
+        Spacer(Modifier.height(26.dp))
+        Text("일정 관리", color = Grey, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("↻", "반복 일정 등록", "매일 또는 원하는 요일의 할 일을 미리 등록해요", onRepeat)
+        Spacer(Modifier.height(10.dp))
+        SettingsItem("D", "디데이 설정", "홈 화면에 표시할 디데이를 최대 2개 관리해요", onDday)
+
+        Spacer(Modifier.height(24.dp))
+        Text("데이터 관리", color = Grey, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        SettingsItem("⇩", "백업 파일 저장", "할 일과 디데이를 파일로 안전하게 보관해요", onBackup)
+        Spacer(Modifier.height(10.dp))
+        SettingsItem("⇧", "백업 파일 복원", "저장해 둔 파일에서 데이터를 불러와요", onRestore)
+
+        Spacer(Modifier.weight(1f))
+        Surface(
+            color = Card,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shadowElevation = 5.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                BottomNavItem("✓", "할 일", false, onBack)
+                BottomNavItem("▦", "달력", false, onBack)
+                BottomNavItem("⚙", "설정", true) { }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsItem(
+    icon: String,
+    title: String,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        color = Card,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(42.dp).background(AquaSoft, CircleShape),
+            ) {
+                Text(icon, color = Aqua, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(3.dp))
+                Text(description, color = Grey, fontSize = 11.sp)
+            }
+            Text("›", color = Steel, fontSize = 24.sp)
         }
     }
 }
@@ -843,37 +954,42 @@ private fun DdayCard(item: DdayItem, modifier: Modifier = Modifier) {
 
     Surface(
         color = Card,
-        shape = RoundedCornerShape(20.dp),
-        shadowElevation = 6.dp,
-        modifier = modifier.height(116.dp),
+        shape = RoundedCornerShape(22.dp),
+        shadowElevation = 3.dp,
+        modifier = modifier.height(94.dp),
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = item.title,
-                color = Lilac,
-                fontSize = 13.sp,
+                color = Ink,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = ddayText,
-                color = Lilac,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                softWrap = false,
-            )
-            Text(
-                text = "${item.date.monthValue}.${item.date.dayOfMonth} · $description",
-                color = Grey,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = ddayText,
+                    color = Aqua,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "${item.date.monthValue}.${item.date.dayOfMonth} · $description",
+                    color = Grey,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
         }
     }
 }
@@ -882,34 +998,58 @@ private fun DdayCard(item: DdayItem, modifier: Modifier = Modifier) {
 private fun TodoRow(todo: TodoItem, onToggle: () -> Unit, onDelete: () -> Unit) {
     Surface(
         color = Card,
-        shape = RoundedCornerShape(15.dp),
-        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 2.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 6.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
-            Checkbox(
-                checked = todo.completed,
-                onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = Aqua,
-                    checkmarkColor = Ink,
-                    uncheckedColor = Line,
-                ),
-            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(if (todo.completed) Aqua else Color.Transparent, CircleShape)
+                    .border(2.dp, if (todo.completed) Aqua else Steel, CircleShape)
+                    .clickable { onToggle() },
+            ) {
+                if (todo.completed) {
+                    Text("✓", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
             Text(
                 text = todo.title,
                 color = if (todo.completed) Grey else Ink,
                 fontSize = 16.sp,
                 textDecoration = if (todo.completed) TextDecoration.LineThrough else null,
-                modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
             )
             TextButton(onClick = onDelete) {
-                Text("삭제", color = Grey, fontSize = 13.sp)
+                Text("⌫", color = Grey, fontSize = 20.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun BottomNavItem(icon: String, label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = icon,
+            color = if (selected) Aqua else Grey,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = label,
+            color = if (selected) Aqua else Grey,
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        )
     }
 }
 

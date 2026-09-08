@@ -35,7 +35,7 @@ class TodoWidgetProvider : AppWidgetProvider() {
             rowIds.forEachIndexed { index, viewId ->
                 val todo = unfinished.getOrNull(index)
                 views.setViewVisibility(viewId, if (todo == null) View.GONE else View.VISIBLE)
-                todo?.let { views.setTextViewText(viewId, "□  ${it.title}") }
+                todo?.let { views.setTextViewText(viewId, "○  ${it.title}") }
             }
 
             val openApp = PendingIntent.getActivity(

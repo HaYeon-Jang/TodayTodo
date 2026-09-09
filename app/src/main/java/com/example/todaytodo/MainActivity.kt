@@ -77,6 +77,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -166,6 +168,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun TodayTodoApp() {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val store = remember { TodoStore(context.applicationContext) }
     val backupScope = rememberCoroutineScope()
     var backupBusy by remember { mutableStateOf(false) }
@@ -201,6 +205,8 @@ private fun TodayTodoApp() {
         todos.add(0, TodoItem(UUID.randomUUID().toString(), title, selectedDate))
         input = ""
         persist()
+        keyboardController?.hide()
+        focusManager.clearFocus()
     }
 
     val backupLauncher = rememberLauncherForActivityResult(

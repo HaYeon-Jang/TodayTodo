@@ -6,6 +6,24 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.activity.result.PickVisualMediaRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
@@ -105,7 +123,9 @@ data class TodoItem(
 
 data class DdayItem(val title: String, val date: LocalDate)
 
-data class TodoBackup(val todos: List<TodoItem>, val ddays: List<DdayItem>)
+data class DiaryEntry(val date: LocalDate, val content: String, val photos: List<String> = emptyList())
+
+data class TodoBackup(val todos: List<TodoItem>, val ddays: List<DdayItem>, val diaries: List<DiaryEntry> = emptyList())
 
 private enum class TodoFilter(val label: String) {
     ALL("전체"), ACTIVE("진행 중"), DONE("완료")
@@ -120,6 +140,11 @@ private enum class RepeatDateTarget { START, END }
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
+        if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         TodoReminder.createNotificationChannel(this)
         TodoReminder.scheduleNext(this)
         TodoWidgetProvider.updateAll(this)
@@ -142,12 +167,16 @@ class MainActivity : ComponentActivity() {
 private fun TodayTodoApp() {
     val context = LocalContext.current
     val store = remember { TodoStore(context.applicationContext) }
+    val backupScope = rememberCoroutineScope()
+    var backupBusy by remember { mutableStateOf(false) }
     val todos = remember { mutableStateListOf<TodoItem>().apply { addAll(store.load()) } }
     var filter by remember { mutableStateOf(TodoFilter.ALL) }
     var input by remember { mutableStateOf("") }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showSettingsScreen by remember { mutableStateOf(false) }
+    var showDiaryScreen by rememberSaveable { mutableStateOf(false) }
+    val diaries = remember { mutableStateListOf<DiaryEntry>().apply { addAll(store.loadDiaries()) } }
     val ddays = remember { mutableStateListOf<DdayItem>().apply { addAll(store.loadDdays()) } }
     var showDdayManager by remember { mutableStateOf(false) }
     var showDdayDialog by remember { mutableStateOf(false) }
@@ -178,14 +207,22 @@ private fun TodayTodoApp() {
         contract = ActivityResultContracts.CreateDocument("application/json"),
     ) { uri ->
         if (uri != null) {
+            val snapshot = todos.toList()
+            backupBusy = true
+            backupScope.launch {
+            try {
             runCatching {
+                withContext(Dispatchers.IO) {
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
-                    it.write(store.createBackup(todos))
+                    it.write(store.createBackup(snapshot))
                 } ?: error("백업 파일을 열 수 없습니다.")
+                }
             }.onSuccess {
                 Toast.makeText(context, "백업이 저장됐어요", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(context, "백업 저장에 실패했어요", Toast.LENGTH_SHORT).show()
+            }
+            } finally { backupBusy = false }
             }
         }
     }
@@ -193,16 +230,27 @@ private fun TodayTodoApp() {
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
+            val existingDiaries = diaries.toList()
+            backupBusy = true
+            backupScope.launch {
+            try {
             runCatching {
+                withContext(Dispatchers.IO) {
                 val backupText = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use {
                     it.readText()
                 } ?: error("백업 파일을 열 수 없습니다.")
-                store.readBackup(backupText)
+                store.readBackup(backupText).also { backup ->
+                    store.saveDiaries((existingDiaries + backup.diaries).distinctBy { it.date })
+                }
+                }
             }.onSuccess { backup ->
                 val merged = (todos + backup.todos).distinctBy { it.id }
                 todos.clear()
                 todos.addAll(merged)
                 persist()
+                val mergedDiaries = (diaries + backup.diaries).distinctBy { it.date }
+                diaries.clear()
+                diaries.addAll(mergedDiaries)
                 if (backup.ddays.isNotEmpty()) {
                     ddays.clear()
                     ddays.addAll(backup.ddays.take(2))
@@ -210,11 +258,13 @@ private fun TodayTodoApp() {
                 }
                 Toast.makeText(
                     context,
-                    "${backup.todos.size}개 항목을 복원했어요",
+                    "할 일 ${backup.todos.size}개와 일기 ${backup.diaries.size}개를 확인했어요. 같은 날짜의 일기는 현재 내용을 유지해요",
                     Toast.LENGTH_SHORT,
                 ).show()
             }.onFailure {
                 Toast.makeText(context, "올바른 TodayTodo 백업 파일이 아니에요", Toast.LENGTH_SHORT).show()
+            }
+            } finally { backupBusy = false }
             }
         }
     }
@@ -594,10 +644,54 @@ private fun TodayTodoApp() {
         )
     ) {
         ProvideTextStyle(ComposeTextStyle(fontFamily = BodyFontFamily)) {
-        Scaffold(containerColor = AppBackground) { contentPadding ->
-            if (showSettingsScreen) {
+        if (backupBusy) {
+            AlertDialog(onDismissRequest = {}, title = { Text("백업 처리 중") },
+                text = { Text("일기와 사진을 처리하고 있어요. 잠시만 기다려 주세요.") }, confirmButton = {})
+        }
+        Scaffold(
+            containerColor = AppBackground,
+            bottomBar = {
+                if (!showDiaryScreen) {
+                    Surface(
+                        color = Card,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                        shadowElevation = 3.dp,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(vertical = 5.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                        ) {
+                            BottomNavItem("✓", "할 일", !showSettingsScreen) { showSettingsScreen = false }
+                            BottomNavItem("✎", "일기", false) { showSettingsScreen = false; showDiaryScreen = true }
+                            BottomNavItem("⚙", "설정", showSettingsScreen) { showSettingsScreen = true }
+                        }
+                    }
+                }
+            },
+        ) { contentPadding ->
+            if (showDiaryScreen) {
+                DiaryScreen(
+                    modifier = Modifier.padding(contentPadding).consumeWindowInsets(contentPadding),
+                    initialDate = selectedDate,
+                    diaries = diaries,
+                    onBack = { showDiaryScreen = false },
+                    onSave = { entry ->
+                        val updated = diaries.filterNot { it.date == entry.date } + entry
+                        store.saveDiaries(updated)
+                        diaries.clear()
+                        diaries.addAll(updated)
+                    },
+                    onDelete = { date ->
+                        val updated = diaries.filterNot { it.date == date }
+                        store.saveDiaries(updated)
+                        diaries.clear()
+                        diaries.addAll(updated)
+                    },
+                )
+            } else if (showSettingsScreen) {
                 SettingsScreen(
-                    modifier = Modifier.padding(contentPadding),
+                    modifier = Modifier.padding(contentPadding).consumeWindowInsets(contentPadding),
                     onBack = { showSettingsScreen = false },
                     onRepeat = {
                         repeatTitle = ""
@@ -617,6 +711,7 @@ private fun TodayTodoApp() {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
+                    .consumeWindowInsets(contentPadding)
                     .background(AppBackground)
                     .padding(horizontal = 18.dp),
             ) {
@@ -642,15 +737,6 @@ private fun TodayTodoApp() {
                             color = Grey,
                             fontSize = 13.sp,
                         )
-                    }
-                    Surface(
-                        color = Card,
-                        shape = CircleShape,
-                        shadowElevation = 3.dp,
-                    ) {
-                        IconButton(onClick = { showSettingsScreen = true }) {
-                            Text("⚙", color = Ink, fontSize = 22.sp)
-                        }
                     }
                 }
 
@@ -814,25 +900,209 @@ private fun TodayTodoApp() {
                     item { Spacer(Modifier.height(10.dp)) }
                 }
 
-                Surface(
-                    color = Card,
-                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-                    shadowElevation = 5.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        BottomNavItem("✓", "할 일", true) { }
-                        BottomNavItem("▦", "달력", false) { showDatePicker = true }
-                        BottomNavItem("⚙", "설정", false) { showSettingsScreen = true }
+            }
+            }
+        }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DiaryScreen(
+    modifier: Modifier = Modifier,
+    initialDate: LocalDate,
+    diaries: List<DiaryEntry>,
+    onBack: () -> Unit,
+    onSave: (DiaryEntry) -> Unit,
+    onDelete: (LocalDate) -> Unit,
+) {
+    val context = LocalContext.current
+    var dateText by rememberSaveable { mutableStateOf(initialDate.toString()) }
+    val date = LocalDate.parse(dateText)
+    val savedEntry = diaries.firstOrNull { it.date == date }
+    val saved = savedEntry?.content.orEmpty()
+    var draft by rememberSaveable(dateText) { mutableStateOf(saved) }
+    var photos by rememberSaveable(dateText) { mutableStateOf(ArrayList(savedEntry?.photos.orEmpty())) }
+    val photoStore = remember { DiaryPhotos(context.applicationContext) }
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(3)) { uris ->
+        if (uris.isNotEmpty()) {
+            importing = true
+            scope.launch {
+                try {
+                    val available = 3 - photos.size
+                    val results = withContext(Dispatchers.IO) {
+                        uris.take(available).map { uri -> runCatching { photoStore.importPhoto(uri) } }
+                    }
+                    photos = ArrayList((photos + results.mapNotNull { it.getOrNull() }).distinct().take(3))
+                    if (uris.size > available || results.any { it.isFailure }) {
+                        Toast.makeText(context, "사진은 최대 3장이에요. 불러오지 못한 사진은 다시 선택해 주세요", Toast.LENGTH_LONG).show()
+                    }
+                } finally { importing = false }
+            }
+        }
+    }
+    var showCalendar by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var pendingDate by remember { mutableStateOf<String?>(null) }
+    var pendingBack by remember { mutableStateOf(false) }
+    val dirty = draft != saved || photos != savedEntry?.photos.orEmpty()
+    val canSave = !importing && (draft.isNotBlank() || photos.isNotEmpty())
+
+    fun navigate(target: LocalDate? = null) {
+        if (importing) return
+        if (dirty) {
+            pendingDate = target?.toString()
+            pendingBack = target == null
+        } else if (target == null) onBack() else dateText = target.toString()
+    }
+    fun finishNavigation() {
+        if (pendingBack) onBack() else pendingDate?.let { dateText = it }
+        pendingBack = false
+        pendingDate = null
+    }
+    fun save(): Boolean = runCatching {
+        onSave(DiaryEntry(date, draft.trim(), photos.toList()))
+        draft = draft.trim()
+    }.onFailure {
+        Toast.makeText(context, "일기를 저장하지 못했어요. 다시 시도해 주세요", Toast.LENGTH_LONG).show()
+    }.isSuccess
+
+    BackHandler { navigate() }
+    if (preview != null) {
+        AlertDialog(
+            onDismissRequest = { preview = null },
+            text = { DiaryPhoto(preview!!, Modifier.fillMaxWidth().height(360.dp), ContentScale.Fit) },
+            confirmButton = { TextButton(onClick = { preview = null }) { Text("닫기") } },
+        )
+    }
+    if (pendingBack || pendingDate != null) {
+        AlertDialog(
+            onDismissRequest = { pendingBack = false; pendingDate = null },
+            title = { Text("작성 중인 일기가 있어요") },
+            text = { Text("변경한 내용을 저장하고 이동할까요?") },
+            confirmButton = {
+                TextButton(enabled = canSave, onClick = { if (save()) finishNavigation() }) { Text("저장 후 이동") }
+            },
+            dismissButton = { TextButton(onClick = { draft = saved; photos = ArrayList(savedEntry?.photos.orEmpty()); finishNavigation() }) { Text("변경 취소 후 이동") } },
+        )
+    }
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("일기를 삭제할까요?") },
+            text = { Text("${formatDate(date)}의 일기가 삭제돼요. 삭제한 내용은 되돌릴 수 없어요.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching { onDelete(date) }.onSuccess {
+                        draft = ""
+                        photos = arrayListOf()
+                        showDelete = false
+                    }.onFailure { Toast.makeText(context, "삭제하지 못했어요. 다시 시도해 주세요", Toast.LENGTH_SHORT).show() }
+                }) { Text("삭제") }
+            },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("취소") } },
+        )
+    }
+    if (showCalendar) {
+        val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = date.toEpochDay() * MILLIS_PER_DAY)
+        DatePickerDialog(
+            onDismissRequest = { showCalendar = false },
+            confirmButton = { TextButton(onClick = {
+                showCalendar = false
+                state.selectedDateMillis?.let { navigate(LocalDate.ofEpochDay(it / MILLIS_PER_DAY)) }
+            }) { Text("선택") } },
+            dismissButton = { TextButton(onClick = { showCalendar = false }) { Text("취소") } },
+        ) { DatePicker(state = state) }
+    }
+    Column(modifier.fillMaxSize().background(AppBackground).imePadding().padding(horizontal = 18.dp)) {
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = Card, shape = CircleShape, shadowElevation = 3.dp) {
+                IconButton(onClick = { navigate() }) { Text("‹", color = Ink, fontSize = 32.sp) }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("일기", color = Ink, fontSize = 28.sp, fontFamily = TitleFontFamily)
+                Text("오늘의 마음을 기록해요", color = Grey, fontSize = 12.sp)
+            }
+            TextButton(enabled = dirty && canSave, onClick = {
+                if (save()) Toast.makeText(context, "일기를 저장했어요", Toast.LENGTH_SHORT).show()
+            }) { Text("저장", fontWeight = FontWeight.Bold) }
+        }
+        Spacer(Modifier.height(18.dp))
+        Surface(color = Card, shape = RoundedCornerShape(22.dp), shadowElevation = 3.dp) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { navigate(date.minusDays(1)) }) { Text("‹", fontSize = 28.sp) }
+                TextButton(onClick = { showCalendar = true }, modifier = Modifier.weight(1f)) { Text(formatDate(date), fontSize = 13.sp) }
+                IconButton(onClick = { navigate(date.plusDays(1)) }) { Text("›", fontSize = 28.sp) }
+            }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (dirty) "저장하지 않은 변경사항" else if (savedEntry == null) "새 일기" else "저장된 일기", color = Grey, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { navigate(LocalDate.now()) }) { Text("오늘") }
+                if (savedEntry != null) TextButton(enabled = !importing, onClick = { showDelete = true }) { Text("삭제", color = Grey) }
+            }
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                placeholder = { Text("오늘은 어떤 하루였나요?\n기억하고 싶은 순간을 자유롭게 남겨보세요.") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 10,
+                shape = RoundedCornerShape(20.dp),
+                colors = TextFieldDefaults.colors(focusedContainerColor = Card, unfocusedContainerColor = Card, focusedIndicatorColor = Aqua, unfocusedIndicatorColor = Line),
+            )
+            Text("${draft.length}자", color = Grey, fontSize = 11.sp, modifier = Modifier.padding(8.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("사진 ${photos.size}/3", color = Ink, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(enabled = !importing && photos.size < 3, onClick = {
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }) { Text(if (importing) "사진 불러오는 중…" else "사진 추가") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                photos.forEachIndexed { index, photo ->
+                    Column(Modifier.weight(1f)) {
+                        Surface(shape = RoundedCornerShape(16.dp), color = Card, modifier = Modifier.clickable { preview = photo }) {
+                            DiaryPhoto(photo, Modifier.fillMaxWidth().height(100.dp))
+                        }
+                        TextButton(enabled = !importing, onClick = { photos = ArrayList(photos.filterNot { it == photo }) }) {
+                            Text("사진 ${index + 1} 삭제", fontSize = 11.sp)
+                        }
                     }
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            Text("지난 일기 · ${diaries.size}개", color = Ink, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            if (diaries.isEmpty()) Text("저장한 일기가 여기에 모여요", color = Grey, fontSize = 13.sp)
+            diaries.sortedByDescending { it.date }.forEach { entry ->
+                Surface(color = Card, shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { navigate(entry.date) }) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(formatDate(entry.date), color = Aqua, fontSize = 12.sp)
+                        Spacer(Modifier.height(6.dp))
+                        Text(entry.content, color = Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (entry.photos.isNotEmpty()) Text("사진 ${entry.photos.size}장", color = Grey, fontSize = 12.sp)
+                    }
+                }
             }
+            Spacer(Modifier.height(16.dp))
         }
-        }
+    }
+}
+
+@Composable
+private fun DiaryPhoto(id: String, modifier: Modifier = Modifier, scale: ContentScale = ContentScale.Crop) {
+    val context = LocalContext.current
+    val bitmap by produceState<android.graphics.Bitmap?>(null, id) {
+        value = withContext(Dispatchers.IO) { runCatching { DiaryPhotos(context).thumbnail(id) }.getOrNull() }
+    }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        bitmap?.let { Image(it.asImageBitmap(), "일기 사진", Modifier.fillMaxSize(), contentScale = scale) }
+            ?: Text("사진을 불러오는 중", color = Grey, fontSize = 11.sp)
     }
 }
 
@@ -881,26 +1151,11 @@ private fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
         Text("데이터 관리", color = Grey, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        SettingsItem("⇩", "백업 파일 저장", "할 일과 디데이를 파일로 안전하게 보관해요", onBackup)
+        SettingsItem("⇩", "백업 파일 저장", "할 일, 디데이와 일기를 파일로 안전하게 보관해요", onBackup)
         Spacer(Modifier.height(10.dp))
         SettingsItem("⇧", "백업 파일 복원", "저장해 둔 파일에서 데이터를 불러와요", onRestore)
 
         Spacer(Modifier.weight(1f))
-        Surface(
-            color = Card,
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            shadowElevation = 5.dp,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                BottomNavItem("✓", "할 일", false, onBack)
-                BottomNavItem("▦", "달력", false, onBack)
-                BottomNavItem("⚙", "설정", true) { }
-            }
-        }
     }
 }
 
@@ -1102,10 +1357,12 @@ internal class TodoStore(private val context: Context) {
 
     fun createBackup(todos: List<TodoItem>): String = JSONObject()
         .put("app", "TodayTodo")
-        .put("version", 2)
+        .put("version", 4)
         .put("createdAt", java.time.ZonedDateTime.now().toString())
         .put("todos", encodeTodos(todos))
         .put("ddays", encodeDdays(loadDdays()))
+        .put("diaries", encodeDiaries(loadDiaries()))
+        .put("diaryPhotos", DiaryPhotos(context).backup(loadDiaries().flatMap { it.photos }))
         .toString(2)
 
     fun readBackup(text: String): TodoBackup {
@@ -1116,7 +1373,34 @@ internal class TodoStore(private val context: Context) {
             backup.optJSONObject("dday") != null -> listOf(decodeDday(backup.getJSONObject("dday")))
             else -> emptyList()
         }
-        return TodoBackup(decodeTodos(backup.getJSONArray("todos")), restoredDdays.take(2))
+        val restoredDiaries = backup.optJSONArray("diaries")?.let(::decodeDiaries) ?: emptyList()
+        val restoredTodos = decodeTodos(backup.getJSONArray("todos"))
+        DiaryPhotos(context).restore(backup.optJSONObject("diaryPhotos") ?: JSONObject(), restoredDiaries.flatMap { it.photos })
+        return TodoBackup(restoredTodos, restoredDdays.take(2), restoredDiaries)
+    }
+
+    fun loadDiaries(): List<DiaryEntry> = decodeDiaries(JSONArray(preferences.getString("diaries", "[]")))
+
+    fun saveDiaries(diaries: List<DiaryEntry>) {
+        require(diaries.all { it.photos.size <= 3 && it.photos.all { photo -> DiaryPhotos(context).file(photo).isFile } })
+        check(preferences.edit().putString("diaries", encodeDiaries(diaries).toString()).commit()) {
+            "일기를 저장하지 못했어요"
+        }
+        runCatching { DiaryPhotos(context).removeUnused(diaries.flatMap { it.photos }.toSet()) }
+    }
+
+    private fun encodeDiaries(diaries: List<DiaryEntry>): JSONArray = JSONArray().apply {
+        diaries.forEach { put(JSONObject().put("date", it.date.toString()).put("content", it.content).put("photos", JSONArray(it.photos))) }
+    }
+
+    private fun decodeDiaries(array: JSONArray): List<DiaryEntry> = buildList {
+        for (index in 0 until array.length()) {
+            val item = array.getJSONObject(index)
+            val images = item.optJSONArray("photos") ?: JSONArray()
+            require(images.length() <= 3)
+            val photos = (0 until images.length()).map { images.getString(it).also(DiaryPhotos::validateId) }.distinct()
+            add(DiaryEntry(LocalDate.parse(item.getString("date")), item.getString("content"), photos))
+        }
     }
 
     private fun encodeDday(dday: DdayItem): JSONObject = JSONObject()

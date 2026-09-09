@@ -6,11 +6,9 @@
 
 ## 앱 화면
 
-Galaxy S25에서 실행한 화면을 바탕으로 구성했습니다. 홈·일기·위젯 이미지는 개인 기록을 샘플 문구로 AI 편집한 예시이며, 설정·반복 일정 화면은 실제 캡처입니다. 휴대폰의 원본 기록은 변경하지 않았습니다.
-
 | 홈 · 할 일 | 일기 |
 | :---: | :---: |
-| <img src="docs/screenshots/home-sample.png" alt="TodayTodo 홈 화면: 날짜별 할 일, 완료 체크와 디데이 카드 — 샘플 문구로 편집" width="280"> | <img src="docs/screenshots/diary-sample.png" alt="TodayTodo 일기 화면: 날짜 선택, 일기 작성, 사진 추가와 지난 일기 목록 — 샘플 문구로 편집" width="280"> |
+| <img src="docs/screenshots/home-sample.png" alt="TodayTodo 홈 화면: 날짜별 할 일, 완료 체크와 디데이 카드" width="280"> | <img src="docs/screenshots/diary-sample.png" alt="TodayTodo 일기 화면: 날짜 선택, 일기 작성, 사진 추가와 지난 일기 목록" width="280"> |
 | 날짜별 할 일과 디데이를 한눈에 | 하루의 기록과 사진을 함께 보관 |
 
 | 설정 | 반복 일정 등록 |
@@ -20,11 +18,9 @@ Galaxy S25에서 실행한 화면을 바탕으로 구성했습니다. 홈·일�
 
 ### 홈 화면 위젯
 
-<img src="docs/screenshots/widget-sample.png" alt="TodayTodo 홈 화면 위젯: 오늘 남은 할 일 2개와 샘플 항목 물 마시기, 책 읽기" width="560">
+<img src="docs/screenshots/widget-sample.png" alt="TodayTodo 홈 화면 위젯: 오늘 남은 할 일과 미완료 개수" width="560">
 
 앱을 열지 않아도 오늘의 미완료 개수와 할 일을 확인할 수 있습니다. 위젯을 누르면 앱이 열립니다.
-
-위 이미지는 실제 홈 화면의 위젯 부분을 중심으로 AI 편집했으며, 개인 기록은 **물 마시기**, **책 읽기**로 변경했습니다. 휴대폰의 원본 기록은 변경하지 않았습니다.
 
 ## 주요 기능
 
